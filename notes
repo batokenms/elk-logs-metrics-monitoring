@@ -1,0 +1,14 @@
+
+Links 
+
+https://artifacthub.io/packages/helm/elastic/filebeat
+
+https://artifacthub.io/packages/helm/elastic/elasticsearch
+
+https://artifacthub.io/packages/helm/elastic/kibana
+
+CronJob 
+
+https://cloud.google.com/kubernetes-engine/docs/how-to/cronjobs#before_you_begin
+
+https://cloud.google.com/kubernetes-engine/docs/concepts/storage-overview
