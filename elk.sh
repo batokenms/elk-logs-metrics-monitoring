@@ -2,7 +2,7 @@
 
 # Create namespace 
 
-kubectl apply -f amazingdevops.yaml -n josh
+kubectl apply -f josh.yaml -n josh
 
 # elasticsearch-ss Deployment 
 
