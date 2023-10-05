@@ -1,5 +1,9 @@
 # Project Guidelines 
 
+# CronJob Schedule 
+
+The schedule "0 0 * * *" specifies that a task should run every day at midnight (0:00 AM) 
+
 # Run the bash script in the repository 
 
 chmod +x elk.sh 
