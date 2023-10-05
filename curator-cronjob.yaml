@@ -2,7 +2,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: elasticsearch-curator
-  namespace: josh
+  namespace: dev
   labels:
     k8s-app: elasticsearch-logging
 spec:
