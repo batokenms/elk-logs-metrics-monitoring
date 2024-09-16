@@ -2,7 +2,7 @@
 
 # Create namespace 
 
-kubectl apply -f josh.yaml -n dev
+kubectl apply -f dev.yaml -n dev
 
 # elasticsearch-ss Deployment 
 
