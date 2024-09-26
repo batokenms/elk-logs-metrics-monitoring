@@ -1,4 +1,4 @@
-# RBAC authn and authz
+# RBAC for Elasticsearch
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -18,14 +18,9 @@ metadata:
     kubernetes.io/cluster-service: "true"
     addonmanager.kubernetes.io/mode: Reconcile
 rules:
-- apiGroups:
-  - ""
-  resources:
-  - "services"
-  - "namespaces"
-  - "endpoints"
-  verbs:
-  - "get"
+- apiGroups: [""]
+  resources: ["services", "namespaces", "endpoints"]
+  verbs: ["get", "list", "watch", "create", "update", "patch"]
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -40,13 +35,12 @@ subjects:
 - kind: ServiceAccount
   name: elasticsearch-logging
   namespace: dev
-  apiGroup: ""
 roleRef:
   kind: ClusterRole
   name: elasticsearch-logging
-  apiGroup: ""
+  apiGroup: rbac.authorization.k8s.io
 ---
-# Elasticsearch deployment itself
+# Elasticsearch StatefulSet Deployment
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -54,63 +48,94 @@ metadata:
   namespace: dev
   labels:
     k8s-app: elasticsearch-logging
-    version: v6.2.4
-    kubernetes.io/cluster-service: "true"
-    addonmanager.kubernetes.io/mode: Reconcile
+    version: v7.5.0
 spec:
   serviceName: elasticsearch-logging
   replicas: 2
-  updateStrategy:
-    type: RollingUpdate
   selector:
     matchLabels:
       k8s-app: elasticsearch-logging
-      version: v6.2.4
+      version: v7.5.0
   template:
     metadata:
       labels:
         k8s-app: elasticsearch-logging
-        version: v6.2.4
-        kubernetes.io/cluster-service: "true"
+        version: v7.5.0
     spec:
       serviceAccountName: elasticsearch-logging
       containers:
-      - image: k8s.gcr.io/elasticsearch:v6.2.4
+      - image: docker.elastic.co/elasticsearch/elasticsearch:7.5.0
         name: elasticsearch-logging
         resources:
-          # need more cpu upon initialization, therefore burstable class
           limits:
-            cpu: 1000m
+            cpu: 1000m        # Updated CPU limit (1 core)
+            memory: 2Gi       # Updated memory limit (2Gi)
           requests:
-            cpu: 100m
+            cpu: 250m         # Updated CPU request (0.25 core)
+            memory: 1Gi       # Updated memory request (1Gi)
         ports:
         - containerPort: 9200
-          name: db
+          name: http
           protocol: TCP
         - containerPort: 9300
           name: transport
           protocol: TCP
         volumeMounts:
-        - name: elasticsearch-logging
-          mountPath: /data
+        - name: elasticsearch-data
+          mountPath: /usr/share/elasticsearch/data
         env:
         - name: "NAMESPACE"
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-      volumes:
-      - name: elasticsearch-logging
-        emptyDir: {}
-      # Elasticsearch requires vm.max_map_count to be at least 262144.
-      # If your OS already sets up this number to a higher value, feel free
-      # to remove this init container.
+        - name: discovery.seed_hosts
+          value: "elasticsearch-logging-0,elasticsearch-logging-1"
+        - name: cluster.initial_master_nodes
+          value: "elasticsearch-logging-0,elasticsearch-logging-1"
+        readinessProbe:
+          httpGet:
+            path: /_cluster/health?local=true
+            port: 9200
+            scheme: HTTP
+          initialDelaySeconds: 120
+          timeoutSeconds: 30
+          periodSeconds: 15
+          failureThreshold: 5
+        livenessProbe:
+          httpGet:
+            path: /_cluster/health?local=true
+            port: 9200
+            scheme: HTTP
+          initialDelaySeconds: 150
+          timeoutSeconds: 30
+          periodSeconds: 15
+          failureThreshold: 5
       initContainers:
+      - name: fix-permissions
+        image: busybox
+        command: ["sh", "-c", "chown -R 1000:1000 /usr/share/elasticsearch/data"]
+        securityContext:
+          runAsUser: 0
+          privileged: true
+        volumeMounts:
+        - name: elasticsearch-data
+          mountPath: /usr/share/elasticsearch/data
       - image: alpine:3.6
         command: ["/sbin/sysctl", "-w", "vm.max_map_count=262144"]
         name: elasticsearch-logging-init
         securityContext:
           privileged: true
+  volumeClaimTemplates:
+  - metadata:
+      name: elasticsearch-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 20Gi
+      storageClassName: standard
 ---
+# Elasticsearch Service
 apiVersion: v1
 kind: Service
 metadata:
@@ -124,9 +149,17 @@ metadata:
 spec:
   type: NodePort
   ports:
-  - port: 9200
-    protocol: TCP
-    targetPort: db
-    nodePort: 31335
+    - name: http
+      port: 9200
+      targetPort: 9200
+      protocol: TCP
+    - name: transport
+      port: 9300
+      targetPort: 9300
+      protocol: TCP
   selector:
     k8s-app: elasticsearch-logging
+    version: v7.5.0
+
+
+
