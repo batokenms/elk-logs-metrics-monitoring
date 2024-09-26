@@ -1,3 +1,11 @@
+# ServiceAccount for Kibana
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kibana-logging
+  namespace: dev
+---
+# Kibana Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,25 +27,27 @@ spec:
       annotations:
         seccomp.security.alpha.kubernetes.io/pod: 'docker/default'
     spec:
+      serviceAccountName: kibana-logging
       containers:
       - name: kibana-logging
-        image: docker.elastic.co/kibana/kibana-oss:6.2.4
+        image: docker.elastic.co/kibana/kibana-oss:7.5.0
         resources:
-          # Adjusted CPU and memory requests for better performance
+          # Increased CPU and memory limits
           limits:
-            cpu: 1000m
-            memory: 2Gi
+            cpu: 2000m         # 2 CPUs
+            memory: 4Gi        # 4 GB memory
           requests:
-            cpu: 500m
-            memory: 1Gi
+            cpu: 1000m         # 1 CPU
+            memory: 2Gi        # 2 GB memory
         env:
           - name: ELASTICSEARCH_URL
-            value: http://elasticsearch-logging:9200
+            value: http://elasticsearch-logging:9200  # Ensure Kibana points to Elasticsearch service
         ports:
         - containerPort: 5601
           name: ui
           protocol: TCP
 ---
+# Kibana Service
 apiVersion: v1
 kind: Service
 metadata:
@@ -49,10 +59,12 @@ metadata:
     addonmanager.kubernetes.io/mode: Reconcile
     kubernetes.io/name: "Kibana"
 spec:
-  type: ClusterIP  # Changed from NodePort to ClusterIP
+  type: NodePort  # NodePort for external access
   ports:
-  - port: 5601
-    protocol: TCP
-    targetPort: ui
+    - port: 5601
+      protocol: TCP
+      targetPort: ui
+      name: ui
   selector:
     k8s-app: kibana-logging
+
